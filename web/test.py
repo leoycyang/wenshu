@@ -18,4 +18,4 @@ WHERE full_text REGEXP :pattern
 LIMIT :limit OFFSET 0
 ''', pattern='指导.{0,10}案例', limit=5):
         lines.append(f'{rowid}: {full_text}')
-    return '\n'.join(lines)
+    return '\n\n'.join(lines)
