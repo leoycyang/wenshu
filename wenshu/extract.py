@@ -16,6 +16,7 @@ if __name__ == '__main__':
                 continue
             title_match = re.search('《([^》]*)》.{0,50}指导.{0,10}案例', row[-1])
             if title_match is not None:
+                print(title_match.group(0))
                 print(title_match.group(1))
                 continue
             title_match1 = re.search('(第\d*[^。》]{0,50}指导[^》]{0,10}案例)', row[-1])

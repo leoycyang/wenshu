@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+Hello suckerdumb
+
+<div id="app">
+    <h2>Database Contents</h2>
+
+     <!-- 🔍 Search Bar -->
+    <div class="search-bar">
+        <input
+            type="text"
+            v-model="fulltext_pattern"
+            placeholder="Search..."
+            @keyup.enter="search"
+        />
+        <button @click="search">Search</button>
+    </div>
+
+    <table v-if="paginatedData.length" border="1" cellspacing="0" cellpadding="8">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Text</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr v-for="(row, index) in paginatedData" :key="index">
+                <td>${ row.ID }</td>
+                <td>${ row.Name }</td>
+                <td>${ row.Text }</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div v-else>
+        Loading data...
+    </div>
+
+    <div v-if="totalPages > 1" class="pagination">
+        <button @click="goToPage(currentPage - 1)" :disabled="currentPage === 1">&laquo;</button>
+        <button 
+            v-for="page in totalPages" 
+            :key="page" 
+            @click="goToPage(page)" 
+            :class="{ active: currentPage === page }">
+            ${ page }
+        </button>
+        <button @click="goToPage(currentPage + 1)" :disabled="currentPage === totalPages">&raquo;</button>
+    </div>
+</div>
+
+{% endblock %}
