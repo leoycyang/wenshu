@@ -1,27 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Wenshu{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    {% block head %}{% endblock %}
+    <title>Wenshu</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}"/> 
+    {% block style %}{% endblock %}
 </head>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+<script>
+    const { createApp, ref, onMounted, computed } = Vue;
+</script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
 <body>
-    <header>
-        <h1>{% block header %}Welcome to Wenshu{% endblock %}</h1>
-    </header>
-
-    <main>
+    <div id="app" class="main">
         {% block content %}{% endblock %}
-    </main>
-
-    <footer>
-        <p>&copy; {{ current_year }} Wenshu</p>
-    </footer>
-    
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
-    {% block scripts %}{% endblock %}
+    </div>
 </body>
+
+{% block script %}{% endblock %}
+<script>
+    // to activate Vue, define an object named createAppProps or else a function named app_setup() in the above script block:
+    let app;
+    if (typeof createAppProps !== 'undefined') {
+        app = createApp({
+            ...createAppProps,
+            delimiters: ['${', '}'],
+        });
+    } else if (typeof app_setup !== 'undefined') {
+        app = createApp({
+            delimiters: ['${', '}'],
+            setup: app_setup,
+        });
+    }
+    app.mount('#app');
+</script>
+
 </html>

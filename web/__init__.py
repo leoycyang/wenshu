@@ -11,7 +11,7 @@ def create_app():
     )
 
     app.db = DB(app)
-    from .test import bp as test_bp
-    app.register_blueprint(test_bp)
+    from .main import bp as main_bp
+    app.register_blueprint(main_bp)
 
     return app

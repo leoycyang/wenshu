@@ -1,60 +1,48 @@
-// script.js - base JavaScript file for Flask template
-
-document.addEventListener('DOMContentLoaded', function () {
-    console.log("JavaScript loaded and ready.");
-    
-    // Example: simple alert trigger
-    const header = document.querySelector('header h1');
-    if (header) {
-        header.addEventListener('click', () => {
-            alert("You clicked the header!");
-        });
+const buildURL = (baseURL, params) => {
+    const url = new URL(baseURL);
+    const searchParams = new URLSearchParams();
+    for (const key in params) {
+        searchParams.append(key, params[key]);
     }
-});
+    url.search = searchParams.toString();
+    return url.toString();
+};
 
-new Vue({
-    el: '#app',
-    delimiters: ['${', '}'],  // change from {{ }} to ${ }
-    data: {
-        allData: [],
-        currentPage: 1,
-        pageSize: 10,
-        fulltext_pattern: '',
-    },
-    computed: {
-        totalPages() {
-            return Math.ceil(this.allData.length / this.pageSize);
-        },
-        paginatedData() {
-            const start = (this.currentPage - 1) * this.pageSize;
-            return this.allData.slice(start, start + this.pageSize);
-        }
-    },
-    methods: {
-        search() {
-            this.fetchData(this.fulltext_pattern);
-        },
-        fetchData(query = '') {
-            let url = '/contents';
-            if (query) {
-                url += '?query=' + encodeURIComponent(query);
-            }
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    this.allData = data;
-                    console.log(data);
-                })
-                .catch(error => {
-                    console.error('Error fetching data:', error);
-                });
-        },
-        goToPage(page) {
-            if (page < 1 || page > this.totalPages) return;
-            this.currentPage = page;
-        }
-    },
-    mounted() {
-        this.fetchData();
+const escapeHtml = (text) => {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+};
+
+const validateNumericInput = (value) => {
+    return value == '' || (! isNaN(parseFloat(value)));
+};
+
+const validateDateInput = (value) => {
+    if (value === '') {
+        return true; // No error if empty
     }
-});
+    // Regex to check for yyyy-mm-dd format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(value)) {
+        return false;
+    }
+    // Attempt to parse the date
+    const parts = value.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10); // Month is 1-indexed in human date, but 0-indexed in Date object
+    const day = parseInt(parts[2], 10);
+    // Create a Date object. Note: month is 0-indexed for Date constructor
+    const dateObj = new Date(year, month - 1, day);
+    // Check if the date object is valid AND if its components match the input
+    // This catches invalid dates like '2023-02-30' (February 30th)
+    return !isNaN(dateObj.getTime()) &&
+        dateObj.getFullYear() === year &&
+        dateObj.getMonth() === (month - 1) &&
+        dateObj.getDate() === day;
+};

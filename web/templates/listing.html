@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h1>Case Listings</h1>
+
+<div id="paged_table">
+    <div class="search-conditions">
+        <div class="predefined-query-selector">
+            <select id="predefined-query-select" v-model="selectedPredefinedQueryName" @change="applyPredefinedQuery">
+                <option value="">-- Select a predefined query --</option>
+                <option v-for="query in predefinedQueries" :key="query.name" :value="query.name">
+                    ${query.name}
+                </option>
+            </select>
+        </div>
+        <div class="search-condition" v-for="(spec, col) in columnSearchSpecs" :key="'search-' + col">
+            <label>${col}:</label>
+            <template v-if="spec.type === 'NUMERIC'">
+                <select v-model="spec.operator">
+                    <option value="EQUAL_TO">=</option>
+                    <option value="BETWEEN">between</option>
+                </select>
+                <input type="text" v-model="spec.input" @input="validateNumeric(col, 'input')" />
+                <input type="text" v-if="spec.operator === 'BETWEEN'" v-model="spec.input2" @input="validateNumeric(col, 'input2')" />
+            </template>
+            <template v-else-if="spec.type === 'DATE'">
+                <select v-model="spec.operator">
+                    <option value="EQUAL_TO">=</option>
+                    <option value="BETWEEN">between</option>
+                </select>
+                <input type="text" v-model="spec.input" placeholder="date (e.g., 2025-02-25)" @input="validateDate(col, 'input')" />
+                <input type="text" v-if="spec.operator === 'BETWEEN'" v-model="spec.input2" placeholder="date (e.g., 2025-12-31)" @input="validateDate(col, 'input2')" />
+            </template>
+            <template v-else-if="spec.type === 'TEXT'">
+                matches
+                <input type="text" v-model="spec.input"
+                 placeholder="regular expression (e.g., XYZ searches for strings containing XYZ; ^XYZ$ for exact match; X.*Y for X and Y separated by any sequence; (AB|XY)Z for AB or XY, followed by Z)" />
+            </template>
+            <span class="error" v-if="spec.error">${spec.error}</span>
+        </div>
+        <button :disabled="hasSearchErrors" @click="applySearch">Filter</button>
+    </div>
+    <div class="loading-overlay" v-if="isLoading">
+        <div class="loading-spinner"></div>
+    </div>
+    <div class="pagination" v-if="!isLoading">
+        <span>
+            ${totalRows} rows total;
+            showing ${perPage * (currentPage-1) + 1} - ${perPage * (currentPage-1) + rowsOnPage.length}
+        </span>
+        <span>
+            <button :disabled="currentPage === 1" @click="changePage(currentPage - 1)">Previous</button>
+            <span class="page-input">
+                Page
+                <input type="number" v-model.number="pageInput" @keyup.enter="userChangePage" :min="1" :max="totalPages"/>
+                of ${totalPages}
+            </span>
+            <button :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">Next</button>
+        </span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th v-for="(width, col) in columnWidthPercents"
+                    :key="col" :style="{ width: width + '%' }"
+                >${col}</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr v-for="(row, index) in rowsOnPage" :key="row[columnHeaders.indexOf('case_id')]">
+                <td v-for="(width, col) in columnWidthPercents"
+                    :key="row[columnHeaders.indexOf('case_id')] + '.' + col" :style="{ width: width + '%' }"
+                ><a v-if="col == 'rowid'" :href="'{{ url_for('main.case_detail') }}' + row[columnHeaders.indexOf(col)].toString()">${row[columnHeaders.indexOf(col)]}</a>
+                <span v-else>${row[columnHeaders.indexOf(col)]}</span></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block script %}
+
+<script>
+    function app_setup() {
+        const _COLUMNS_SEARCHABLE = {
+            'rowid': 'NUMERIC',
+            'case_id': 'TEXT',
+            'ruling_date': 'DATE',
+            'full_text': 'TEXT',
+        };
+        const _COLUMN_WIDTHS = {
+            'rowid': 1,
+            // 'source_url': 1,
+            'case_id': 10,
+            'case_title': 10,
+            'court': 10,
+            // 'location': 10,
+            // 'case_type_code': 1,
+            // 'source': 3,
+            // 'procedure': 3,
+            'ruling_date': 3,
+            'publication_date': 3,
+            'parties': 5,
+            'cause_of_action': 5,
+            'legal_basis': 10,
+            'full_text': 30,
+        };
+        const _COLUMN_WIDTH_SUM = Object.values(_COLUMN_WIDTHS).reduce((s, v) => s + v, 0);
+        const columnWidthPercents = ref(
+            Object.fromEntries(Object.entries(_COLUMN_WIDTHS).map(([k, v]) => [k, Math.round(v*100/_COLUMN_WIDTH_SUM)]))
+        );
+        const columnHeaders = ref([]);
+        const appliedSearchSpecs = ref({});
+        const totalRows = ref(0);
+        const currentPage = ref(1);
+        const pageInput = ref(1);
+        const perPage = ref(10);
+        const rowsOnPage = ref([]);
+        const isLoading = ref(false);
+
+        const columnSearchSpecs = ref({});
+        Object.keys(_COLUMNS_SEARCHABLE).forEach(col => {
+            if (_COLUMNS_SEARCHABLE[col] === 'NUMERIC' || _COLUMNS_SEARCHABLE[col] === 'DATE') {
+                columnSearchSpecs.value[col] = { operator: 'EQUAL_TO', input: '', input2: '' };
+            } else if (_COLUMNS_SEARCHABLE[col] === 'TEXT') {
+                columnSearchSpecs.value[col] = { input: '' };
+            }
+            columnSearchSpecs.value[col].type = _COLUMNS_SEARCHABLE[col];
+        });
+
+        const validateNumeric = (col, valueField) => {
+            const value = columnSearchSpecs.value[col][valueField];
+            columnSearchSpecs.value[col].error =
+                validateNumericInput(value)? '' : 'Please enter a number';
+        };
+
+        const validateDate = (col, valueField) => {
+            const value = columnSearchSpecs.value[col][valueField];
+            columnSearchSpecs.value[col].error =
+                validateDateInput(value)? '' : 'Invalid date; format: yyyy-mm-dd';
+        };
+
+        const hasSearchErrors = computed(() =>
+            Object.values(columnSearchSpecs.value).some(spec => spec.hasOwnProperty('error') && spec.error !== ''))
+
+        const applySearch = () => {
+            if (hasSearchErrors.value) {
+                console.log("search spec has errors");
+            } else {
+                const params = {}
+                for (const [col, spec] of Object.entries(columnSearchSpecs.value)) {
+                    if ((spec.hasOwnProperty('input') && spec['input'] !== '' ) ||
+                        (spec.hasOwnProperty('input2') && spec['input2'] !== '' )) {
+                        params[col] = spec;
+                    }
+                }
+                appliedSearchSpecs.value = params;
+                currentPage.value = 1;
+                pageInput.value = 1;
+                fetchPage();
+            }
+        };
+
+        const selectedPredefinedQueryName = ref('');
+        const predefinedQueries = ref([ {
+                name: "Clear filter",
+                specs: {},
+            }, {
+                name: "指导案例",
+                specs: {
+                    full_text: { input: '指导.{0,5}案例' },
+                },
+            },
+        ]);
+
+        const applyPredefinedQuery = () => {
+            const queryName = selectedPredefinedQueryName.value;
+            const selectedQuery = queryName ?
+                predefinedQueries.value.find(q => q.name === queryName) : predefinedQueries.value[0]; // default to "Clear filter"
+            if (!selectedQuery) {
+                console.warn(`predefined query ${queryName} not found`);
+                return
+            }
+            Object.keys(columnSearchSpecs.value).forEach(col => {
+                if (col in selectedQuery.specs) {
+                    const specToApply = selectedQuery.specs[col];
+                    columnSearchSpecs.value[col] = { ...specToApply, type: _COLUMNS_SEARCHABLE[col], error: '' };
+                } else {
+                    if (_COLUMNS_SEARCHABLE[col] === 'NUMERIC' || _COLUMNS_SEARCHABLE[col] === 'DATE') {
+                        columnSearchSpecs.value[col] = { operator: 'EQUAL_TO', input: '', input2: '', type: _COLUMNS_SEARCHABLE[col], error: '' };
+                    } else if (_COLUMNS_SEARCHABLE[col] === 'TEXT') {
+                        columnSearchSpecs.value[col] = { input: '', type: _COLUMNS_SEARCHABLE[col], error: '' };
+                    }
+                }
+            });
+        };
+
+        const fetchPage = () => {
+            isLoading.value = true;
+            fetch("{{ url_for('main.summarize', _external=True) }}", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(appliedSearchSpecs.value),
+            })
+                .then(response => response.json())
+                .then(response => {
+                    columnHeaders.value = response.column_names;
+                    totalRows.value = response.row_count;
+                    return fetch("{{ url_for('main.fetch', _external=True) }}", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({ ...appliedSearchSpecs.value,
+                                offset: perPage.value * (currentPage.value-1),
+                                limit: perPage.value }),
+                            });
+                })
+                .then(response => response.json())
+                .then(response => {
+                    rowsOnPage.value = response.rows;
+                })
+                .finally(() => {
+                    isLoading.value = false;
+                });
+        };
+
+        const totalPages = computed(() => Math.ceil(totalRows.value / perPage.value));
+
+        const changePage = (page) => {
+            if (page >= 1 && page <= totalPages.value) {
+                currentPage.value = page;
+                pageInput.value = page;
+                fetchPage();
+            }
+        };
+
+        const userChangePage = () => {
+            if (pageInput.value >= 1 && pageInput.value <= totalPages.value) {
+                currentPage.value = pageInput.value;
+                fetchPage();
+            } else {
+                pageInput.value = currentPage.value; // reset to current page if invalid
+            }
+        };
+
+        onMounted(fetchPage);
+
+        return {
+            columnWidthPercents,
+            columnSearchSpecs,
+            columnHeaders,
+            totalRows,
+            perPage,
+            totalPages,
+            currentPage,
+            pageInput,
+            rowsOnPage,
+            isLoading,
+            changePage,
+            userChangePage,
+            validateNumeric,
+            validateDate,
+            hasSearchErrors,
+            applySearch,
+            appliedSearchSpecs,
+            selectedPredefinedQueryName,
+            predefinedQueries,
+            applyPredefinedQuery,
+        };
+    }
+</script>
+
+{% endblock %}
