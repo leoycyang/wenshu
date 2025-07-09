@@ -1,3 +1,15 @@
+:root {
+    --span-highlight-color-0: rgba(255, 255, 153, 0.6); /* light yellow */
+    --span-highlight-color-1: rgba(173, 216, 230, 0.6); /* light blue */
+    --span-highlight-color-2: rgba(144, 238, 144, 0.6); /* light green */
+    --span-highlight-color-3: rgba(255, 182, 193, 0.6); /* light pink */
+    --span-highlight-color-4: rgba(200, 160, 255, 0.6); /* light purple */
+    --span-highlight-color-5: rgba(255, 204, 153, 0.6); /* light orange */
+    --span-highlight-color-6: rgba(153, 255, 204, 0.6); /* mint green */
+    --span-highlight-color-7: rgba(204, 153, 255, 0.6); /* lilac */
+    --span-highlight-color-8: rgba(153, 204, 255, 0.6); /* cornflower blue */
+}
+
 .search-conditions {
     background-color: #f8f8f8;
     border: 1px solid #eee;
@@ -73,17 +85,81 @@ body { padding-bottom: 50px; } /* padding for better scroll behavior */
     100% { transform: rotate(360deg); }
 }
 
-.fulltext-block {
-    white-space: pre-wrap;
+.annotated-text-container {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 20px;
+    white-space: pre-wrap; /* For automatic wrapping */
+    font-size: 1.1em;
     line-height: 1.6;
-    font-family: serif;
+    position: relative; /* Needed for tooltip positioning if you add it later */
 }
-
-.highlight-context {
-    background-color: #fffae6; /* pale yellow */
+.highlight {
+    /* The .highlight class does not set the background-color directly. */
+    /* It provides common styling, and the background is applied inline dynamically. */
+    position: relative;
+    cursor: help;
+    border-bottom: 1px dotted rgba(153, 153, 153, 0.5); /* Subtle dotted line */
+    /* You can add padding here if you want highlights to extend slightly beyond text */
+    /* padding: 0 1px; */
 }
-
-.highlight-extracted {
-    background-color: #cce5ff; /* light blue */
+.superscript-wrapper {
+    display: inline-block; /* Allows margins to push them slightly apart */
+    line-height: 0; /* Prevents increasing line height too much */
+    vertical-align: super;
+    margin-left: 1px; /* Small spacing between superscripts */
+}
+.superscript-wrapper sup {
+    font-size: 0.6em;
+    line-height: 0;
     font-weight: bold;
+    padding: 0 1px; /* Add a tiny bit of padding around the superscript text for the background */
+    border-radius: 2px; /* Slightly rounded corners for the highlight */
+    color: inherit; /* Explicitly ensure text color is default, not highlight */
+}
+.annotations-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+.annotations-table th, .annotations-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+}
+.annotations-table th {
+    background-color: #f2f2f2;
+}
+.annotation-index-cell {
+    width: 50px; /* Adjust as needed */
+    text-align: center;
+    font-weight: bold;
+    /* Add some padding for the highlighted cell */
+    padding: 8px;
+    /* Ensure text contrast on highlight */
+    color: #333; /* Keep text dark for better readability over light highlights */
+}
+.annotation-list {
+    list-style: none; /* Remove default bullet points */
+    padding: 0;
+    margin: 0;
+}
+.annotation-list li {
+    margin-bottom: 10px; /* Space between annotations */
+    padding-bottom: 5px; /* Padding for bottom border */
+    border-bottom: 1px dashed #eee; /* Subtle separator */
+}
+.annotation-list li:last-child {
+    margin-bottom: 0; /* No margin after last item */
+    border-bottom: none; /* No border after last item */
+}
+.annotation-list strong {
+    display: block; /* Title on its own line */
+    margin-bottom: 3px; /* Space between title and text */
+    color: #555; /* Slightly darker title color */
+}
+.no-annotation-text {
+    font-style: italic;
+    color: #777;
 }

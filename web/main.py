@@ -1,12 +1,16 @@
 import datetime
-import re
 
 from flask import current_app as app
 from flask import request, render_template, jsonify
-from .refcase import find_highlight_spans
 
 from flask import Blueprint
 bp = Blueprint('main', __name__)
+
+from . import refcase
+
+@bp.route('/hello')
+def hello():
+    return 'Hello, World!'
 
 def str_to_val(argtype, arg):
     if argtype == 'DATE':
@@ -57,6 +61,16 @@ def fetch():
         'rows': [[col for col in row] for row in rows]
     })
 
+@bp.route('/api/extract-refcase', methods=['POST'])
+def extract_refcase():
+    rowid = request.get_json()['rowid']
+    full_text = app.db.execute(f'SELECT full_text FROM wenshu WHERE rowid = :rowid', rowid=rowid)[0][0]
+    results = refcase.extract(full_text, r'(?P<anchor>指导.{0,5}案例)', r'.{100}$', r'^.{100}', [
+        r'(?P<case_number>\d+)号案',
+        r'《(?P<case_title>[^》]*)》',
+    ])
+    return jsonify(dict(results=results, full_text=full_text))
+
 @bp.route('/')
 def index():
     return render_template(
@@ -66,22 +80,10 @@ def index():
 @bp.route('/case/', defaults={'rowid': None})
 @bp.route('/case/<int:rowid>')
 def case_detail(rowid):
-    return render_template("case.html", rowid=rowid)
-
-@bp.route("/api/case/<int:rowid>")
-def api_case_detail(rowid):
-    rows = app.db.execute(f'select rowid, full_text from wenshu where rowid={rowid}')
-    if len(rows) is 0:
-        return jsonify({"error": "Case not found"}), 404
-
-    fulltext = rows[0][1]
-    highlight_spans = find_highlight_spans(
-        fulltext,
-        anchor_regex=r"(指导.{0,5}案例)",
-        extraction_regex=r"(?P<case_number>\d+)号案"
+    case_id, full_text = app.db.execute(f'SELECT case_id, full_text FROM wenshu WHERE rowid = :rowid', rowid=rowid)[0]
+    return render_template(
+        'case.html',
+        rowid = rowid,
+        case_id = case_id,
+        full_text = full_text,
     )
-
-    return jsonify({
-        "full_text": fulltext,
-        "highlight_spans": highlight_spans
-    })

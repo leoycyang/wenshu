@@ -1,29 +1,63 @@
 import re
 
-def find_highlight_spans(fulltext, anchor_regex, extraction_regex):
-    anchor_pattern = re.compile(anchor_regex)
-    extract_pattern = re.compile(extraction_regex)
-
-    highlight_spans = []
-
-    for anchor_match in anchor_pattern.finditer(fulltext):
-        anchor_start = anchor_match.start(1)
-        anchor_end = anchor_match.end(1)
-
-        context_start = max(0, anchor_start - 100)
-        context_end = min(len(fulltext), anchor_end + 100)
-        context_text = fulltext[context_start:context_end]
-        print(context_text)
-
-        extracted_spans = []
-        for m in extract_pattern.finditer(context_text):
-            span_start, span_end = m.span()
-            extracted_spans.append((context_start + span_start, context_start + span_end))
-
-        # add context highlight (with nested extracted inside)
-        highlight_spans.append({
-            "context": [context_start, context_end],
-            "extracted": extracted_spans
+def extract(full_text, anchor_regexp, context_before, context_after, extract_regexps):
+    """
+    Process full_text to extract relevant information based on anchors.
+    Anchors are substrings defined by a parenthesized group named 'anchor' in anchor_regexp;
+    the entire full_text will be processed to find all anchors.
+    The context around each anchor is defined as the substring matching context_before before the anchor,
+    followed by the anchor, and then the substring matching context_after after the anchor.
+    The regular expression context_before should end with '$',
+    and context_after should begin with '^'.
+    Finally, extract_regexps are applied to the context:
+    for each regexp, all named parenthesized groups will be extracted,
+    and a dictionary with the group name, extracted string, and span will be generated;
+    in the end, a list of all dictionaries generated over all regexps will be reported for the anchor.
+    """
+    anchor_pat = re.compile(anchor_regexp, flags=re.DOTALL)
+    context_before_pat = re.compile(context_before, flags=re.DOTALL)
+    context_after_pat = re.compile(context_after, flags=re.DOTALL)
+    extract_pats = [re.compile(extract_regexp, flags=re.DOTALL) for extract_regexp in extract_regexps]
+    # iterate through all anchor matches:
+    results = []
+    start_pos = 0
+    while (anchor_match := anchor_pat.search(full_text, start_pos)) is not None:
+        # identify anchor substring and its positions:
+        anchor_span = anchor_match.span('anchor')
+        anchor_substring = full_text[anchor_span[0]:anchor_span[1]]
+        # find the match for context_before ending at anchor's start:
+        before_match = context_before_pat.search(full_text[:anchor_span[0]])
+        context_before_str = before_match.group(0) if before_match else ''
+        # find the match for context_after starting at anchor's end:
+        after_match = context_after_pat.search(full_text[anchor_span[1]:])
+        context_after_str = after_match.group(0) if after_match else ''
+        # build context string:
+        context = context_before_str + anchor_substring + context_after_str
+        # evaluate extract_regexp over context, extract all groups:
+        extracts = []
+        for extract_pat in extract_pats:
+            for extract_match in extract_pat.finditer(context):
+                for group, text in extract_match.groupdict().items():
+                    begin, end = extract_match.span(group)
+                    begin += anchor_span[0] - len(context_before_str)
+                    end += anchor_span[0] - len(context_after_str)
+                    extracts.append({
+                        'label': group,
+                        'text': text,
+                        'span': (begin, end),
+                    })
+        # order by span and deduplicate:
+        final_extracts = []
+        for extract in sorted(extracts, key=lambda entry: entry['span']):
+            if not any(e for e in final_extracts if e['label'] == extract['label'] and e['span'] == extract['span']):
+                final_extracts.append(extract)
+        results.append({
+            'anchor': anchor_substring,
+            'anchor_span': anchor_span,
+            'context': context,
+            'context_span': (anchor_span[0] - len(context_before_str), anchor_span[1] + len(context_after_str)),
+            'extracts': final_extracts,
         })
-
-    return highlight_spans
+        # set starting search position for the next anchor:
+        start_pos = anchor_span[1]
+    return results

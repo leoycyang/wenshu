@@ -1,88 +1,197 @@
 {% extends "base.html" %}
-{% block content %}
-<h1>Case Detail</h1>
-<div id="app">
-    <div v-if="loading" class="loading-overlay"><div class="loading-spinner"></div></div>
-    <div v-else>
-        <table>
-            <tr v-for="(value, key) in caseData" :key="key">
-                <th style="width: 20%;">${ key }</th>
-                <td>${ value }</td>
-            </tr>
-        </table>
-    </div>
-</div>
 
-<div v-if="caseData && fulltextWithHighlights.length">
-    <div class="fulltext-block" v-html="fulltextWithHighlights"></div>
-</div>
+{% block content %}
+
+<h1>{{case_id}}</h1>
+
+<h2>Full Text</h2>
+<div class="annotated-text-container" v-html="renderedText"></div>
+
+<h2>Extracted Reference Cases</h2>
+<table class="annotations-table">
+    <thead>
+        <tr>
+            <th class="annotation-index-cell">#</th>
+            <th>Context</th>
+            <th>Extracted</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr v-for="(annotation, index) in sortedAnnotations" :key="annotation.id">
+            <td class="annotation-index-cell" :style="{ backgroundColor: annotation.color }">${annotation.computedIndex}</td>
+            <td>${annotation.context}</td>
+            <td>
+                <ul v-if="annotation.extracts && annotation.extracts.length > 0" class="annotation-list">
+                    <li v-for="(detail, detailIndex) in annotation.extracts" :key="detailIndex">
+                        <strong>${detail.label}</strong>
+                        <p>${detail.text}</p>
+                    </li>
+                </ul>
+                <em v-else class="no-annotation-text">Nothing extracted</em>
+            </td>
+        </tr>
+    </tbody>
+</table>
+
 {% endblock %}
 
 {% block script %}
+
 <script>
     function app_setup() {
-        const rowid = parseInt("{{ rowid }}");
-        const loading = ref(true);
-        const caseData = ref({});
-        const highlightSpans = ref([]);
-        const fulltextWithHighlights = computed(() => {
-            if (!caseData.value.full_text) return '';
+        const fullText = ref('');
+        const anchors = ref([]);
 
-            console.log('GOT EHRE@!')
-            const text = caseData.value.full_text;
-            let fragments = [];
-            let cursor = 0;
-
-            // Flatten spans into [{start, end, class}]
-            let allSpans = [];
-            for (const { context, extracted } of highlightSpans.value) {
-                allSpans.push({ start: context[0], end: context[1], class: 'highlight-context' });
-                for (const [start, end] of extracted) {
-                    allSpans.push({ start, end, class: 'highlight-extracted' });
+        // Initialize highlightColors by calling the function
+        const getCssHighlightColors = () => {
+            const colors = [];
+            const rootStyles = getComputedStyle(document.documentElement); // Get styles from :root
+            // Loop to find all --span-highlight-color-N variables
+            let i = 0;
+            let colorVar;
+            do {
+                colorVar = rootStyles.getPropertyValue(`--span-highlight-color-${i}`).trim();
+                if (colorVar) {
+                    colors.push(colorVar);
                 }
+                i++;
+            } while (colorVar); // Continue as long as a color variable is found
+            if (colors.length === 0) {
+                console.warn("No CSS custom properties for highlight colors found (e.g., --span-highlight-color-0). Using fallback colors.");
+                // Fallback colors if none are found in CSS, for robustness
+                return [
+                    'rgba(255, 255, 153, 0.6)',
+                    'rgba(173, 216, 230, 0.6)'
+                ];
             }
+            return colors;
+        };
+        const highlightColors = getCssHighlightColors();
 
-            // Sort and merge
-            allSpans.sort((a, b) => a.start - b.start);
-
-            for (const span of allSpans) {
-                if (span.start > cursor) {
-                    fragments.push(escapeHtml(text.slice(cursor, span.start)));
-                }
-                fragments.push(`<span class="${span.class}">` + escapeHtml(text.slice(span.start, span.end)) + `</span>`);
-                cursor = span.end;
-            }
-
-            if (cursor < text.length) {
-                fragments.push(escapeHtml(text.slice(cursor)));
-            }
-
-            return fragments.join('');
+        // Prepare annotations with computed properties for rendering
+        const preparedAnnotations = computed(() => {
+            return anchors.value.map((ann, idx) => ({
+                ...ann,
+                computedIndex: idx + 1, // For superscript numbering (1-based)
+                color: highlightColors[idx % highlightColors.length], // Cycle colors
+            }));
         });
 
-        const escapeHtml = (unsafe) => {
-            return unsafe.replace(/[&<"'>]/g, function (m) {
-                return {
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#039;'
-                }[m];
+        const renderedText = computed(() => {
+            const text = fullText.value;
+            let htmlOutput = '';
+            // Create a map to store all unique event points (start/end of annotations)
+            // Each value is an object { starts: Set<string>, ends: Set<string> }
+            const eventMap = new Map();
+            preparedAnnotations.value.forEach(ann => {
+                // Ensure entries for start/end positions exist
+                if (!eventMap.has(ann.start)) {
+                    eventMap.set(ann.start, { starts: new Set(), ends: new Set() });
+                }
+                eventMap.get(ann.start).starts.add(ann.id);
+
+                if (!eventMap.has(ann.end)) {
+                    eventMap.set(ann.end, { starts: new Set(), ends: new Set() });
+                }
+                eventMap.get(ann.end).ends.add(ann.id);
             });
+            // Get sorted unique positions for iteration
+            const sortedPoints = Array.from(eventMap.keys()).sort((a, b) => a - b);
+            let lastPos = 0;
+            // activeAnnotations: A Set of annotation IDs that are currently active
+            const activeAnnotations = new Set(); // Using Set for efficient add/delete and uniqueness
+            // Helper to get annotation object by ID
+            const getAnnotationById = (id) => preparedAnnotations.value.find(a => a.id === id);
+            for (const currentPos of sortedPoints) {
+                // 1. Process the text segment *before* the current event point
+                if (currentPos > lastPos) {
+                    const segmentText = text.substring(lastPos, currentPos);
+                    if (segmentText.length > 0) {
+                        let segmentHtml = escapeHtml(segmentText); // Start with just the escaped text
+
+                        if (activeAnnotations.size > 0) { // ONLY apply highlight styling if annotations are active
+                            const colors = Array.from(activeAnnotations).map(id => getAnnotationById(id).color);
+                            const gradientLayers = colors
+                                .map(color => `linear-gradient(${color}, ${color})`)
+                                .join(',');
+                            const segmentStyle = `background-image: ${gradientLayers};`;
+                            
+                            // Wrap the text in a span with the highlight class and style
+                            segmentHtml = `<span class="highlight" style="${segmentStyle}">${segmentHtml}</span>`;
+                        }
+                        htmlOutput += segmentHtml; // Append the (possibly wrapped) segment HTML
+                    }
+                }
+                // 2. Process events at the currentPos (updates activeAnnotationsSet)
+                // Handle annotations that *end* at currentPos (and their superscripts)
+                // Use a temporary array to collect before processing, to prevent modification issues
+                const endingAnnotationIds = eventMap.has(currentPos) ? Array.from(eventMap.get(currentPos).ends) : [];
+                const superscriptsToAdd = [];
+                endingAnnotationIds.forEach(id => {
+                    const ann = getAnnotationById(id);
+                    if (ann) {
+                        superscriptsToAdd.push({ index: ann.computedIndex, color: ann.color });
+                        activeAnnotations.delete(id); // Remove from active set
+                    }
+                });
+                // Add superscripts for annotations that just ended, in order
+                superscriptsToAdd.sort((a, b) => a.index - b.index);
+                superscriptsToAdd.forEach(sup => {
+                    htmlOutput += `<span class="superscript-wrapper"><sup style="background-color: ${sup.color};">${sup.index}</sup></span>`;
+                });
+                // Handle annotations that *start* at currentPos
+                // Use a temporary array to collect before processing
+                const startingAnnotationIds = eventMap.has(currentPos) ? Array.from(eventMap.get(currentPos).starts) : [];
+                startingAnnotationIds.forEach(id => {
+                    activeAnnotations.add(id); // Add to active set
+                });
+                lastPos = currentPos;
+            }
+            // Add any remaining text after the last event point (important if no annotations at end)
+            if (lastPos < text.length) {
+                htmlOutput += escapeHtml(text.substring(lastPos));
+            }
+            return htmlOutput;
+        });
+
+        // A computed property to sort annotations for the table by their computed index
+        const sortedAnnotations = computed(() => {
+            return [...preparedAnnotations.value].filter(a => a.computedIndex).sort((a, b) => a.computedIndex - b.computedIndex);
+        });
+
+        const fetchPage = () => {
+            fetch("{{ url_for('main.extract_refcase', _external=True) }}", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ rowid: parseInt("{{ rowid }}") }),
+            })
+                .then(response => response.json())
+                .then(response => {
+                    fullText.value = response.full_text;
+                    if (response.results) {
+                        anchors.value = response.results.map((result, index) => ({
+                            id: `a${index}`,
+                            start: result.anchor_span[0],
+                            end: result.anchor_span[1],
+                            context: result.context,
+                            extracts: result.extracts,
+                        }));
+                    } else {
+                        anchors.value = [];
+                    }
+                });
         };
 
-        onMounted(() => {
-            fetch(`/api/case/${rowid}`)
-                .then(response => response.json())
-                .then(data => {
-                    caseData.value = { 'full_text': data.full_text };
-                    highlightSpans.value = data.highlight_spans;
-                })
-                .finally(() => loading.value = false);
-        });
+        onMounted(fetchPage);
 
-        return { rowid, caseData, fulltextWithHighlights, loading };
+        return {
+            fullText,
+            anchors,
+            renderedText,
+            sortedAnnotations,
+            highlightColors // Expose if you want to show legend or debug
+        };
     }
 </script>
+
 {% endblock %}
