@@ -3,6 +3,7 @@ import re
 
 from flask import current_app as app
 from flask import request, render_template, jsonify
+from .refcase import find_highlight_spans
 
 from flask import Blueprint
 bp = Blueprint('main', __name__)
@@ -65,19 +66,22 @@ def index():
 @bp.route('/case/', defaults={'rowid': None})
 @bp.route('/case/<int:rowid>')
 def case_detail(rowid):
-    output_items = list()
-    rows = app.db.execute(f'select rowid, full_text from wenshu where rowid={rowid}')
-    for this_rowid, this_full_text in rows:
-        output_items.append(str(this_rowid))
-        output_items.append(str(this_full_text))
-        refs = extract_refs(this_full_text)
-        output_items.append(','.join(refs))
-    return '<pre>' + '\n'.join(output_items) + '</pre>'
+    return render_template("case.html", rowid=rowid)
 
-def extract_refs(full_text):
-    extract = list()
-    title_match = re.search('《([^》]*)》.{0,50}指导.{0,10}案例', full_text)
-    if title_match is not None:
-        # print(title_match.group(0))
-        extract.append(str(title_match.group(1)))
-    return extract
+@bp.route("/api/case/<int:rowid>")
+def api_case_detail(rowid):
+    rows = app.db.execute(f'select rowid, full_text from wenshu where rowid={rowid}')
+    if len(rows) is 0:
+        return jsonify({"error": "Case not found"}), 404
+
+    fulltext = rows[0][1]
+    highlight_spans = find_highlight_spans(
+        fulltext,
+        anchor_regex=r"(指导.{0,5}案例)",
+        extraction_regex=r"(?P<case_number>\d+)号案"
+    )
+
+    return jsonify({
+        "full_text": fulltext,
+        "highlight_spans": highlight_spans
+    })

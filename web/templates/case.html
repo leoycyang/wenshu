@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Case Detail</h1>
+<div id="app">
+    <div v-if="loading" class="loading-overlay"><div class="loading-spinner"></div></div>
+    <div v-else>
+        <table>
+            <tr v-for="(value, key) in caseData" :key="key">
+                <th style="width: 20%;">${ key }</th>
+                <td>${ value }</td>
+            </tr>
+        </table>
+    </div>
+</div>
+
+<div v-if="caseData && fulltextWithHighlights.length">
+    <div class="fulltext-block" v-html="fulltextWithHighlights"></div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    function app_setup() {
+        const rowid = parseInt("{{ rowid }}");
+        const loading = ref(true);
+        const caseData = ref({});
+        const highlightSpans = ref([]);
+        const fulltextWithHighlights = computed(() => {
+            if (!caseData.value.full_text) return '';
+
+            console.log('GOT EHRE@!')
+            const text = caseData.value.full_text;
+            let fragments = [];
+            let cursor = 0;
+
+            // Flatten spans into [{start, end, class}]
+            let allSpans = [];
+            for (const { context, extracted } of highlightSpans.value) {
+                allSpans.push({ start: context[0], end: context[1], class: 'highlight-context' });
+                for (const [start, end] of extracted) {
+                    allSpans.push({ start, end, class: 'highlight-extracted' });
+                }
+            }
+
+            // Sort and merge
+            allSpans.sort((a, b) => a.start - b.start);
+
+            for (const span of allSpans) {
+                if (span.start > cursor) {
+                    fragments.push(escapeHtml(text.slice(cursor, span.start)));
+                }
+                fragments.push(`<span class="${span.class}">` + escapeHtml(text.slice(span.start, span.end)) + `</span>`);
+                cursor = span.end;
+            }
+
+            if (cursor < text.length) {
+                fragments.push(escapeHtml(text.slice(cursor)));
+            }
+
+            return fragments.join('');
+        });
+
+        const escapeHtml = (unsafe) => {
+            return unsafe.replace(/[&<"'>]/g, function (m) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                }[m];
+            });
+        };
+
+        onMounted(() => {
+            fetch(`/api/case/${rowid}`)
+                .then(response => response.json())
+                .then(data => {
+                    caseData.value = { 'full_text': data.full_text };
+                    highlightSpans.value = data.highlight_spans;
+                })
+                .finally(() => loading.value = false);
+        });
+
+        return { rowid, caseData, fulltextWithHighlights, loading };
+    }
+</script>
+{% endblock %}

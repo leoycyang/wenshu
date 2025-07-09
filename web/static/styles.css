@@ -72,3 +72,18 @@ body { padding-bottom: 50px; } /* padding for better scroll behavior */
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+.fulltext-block {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-family: serif;
+}
+
+.highlight-context {
+    background-color: #fffae6; /* pale yellow */
+}
+
+.highlight-extracted {
+    background-color: #cce5ff; /* light blue */
+    font-weight: bold;
+}
