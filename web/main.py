@@ -66,8 +66,13 @@ def extract_refcase():
     rowid = request.get_json()['rowid']
     full_text = app.db.execute(f'SELECT full_text FROM wenshu WHERE rowid = :rowid', rowid=rowid)[0][0]
     results = refcase.extract(full_text, r'(?P<anchor>指导.{0,5}案例)', r'.{100}$', r'^.{100}', [
-        r'(?P<case_number>\d+)号案',
-        r'《(?P<case_title>[^》]*)》',
+        r'(?P<case_number>\d+)号案', 
+        r'(?P<number>\d+)号(?!案)',
+        r'《(?P<case_title>[^》]*)》', r'“(?P<case_title>[^”]+)”', 
+        r'(?<!\d)(?P<year>\d{4})(?!\d)',
+        r'(?P<month>\d{1,2})月',
+        r'［(?P<case_pub_ref>[^］]*)］',
+        r'(?P<series>\d+)[批|期|辑]',
     ])
     return jsonify(dict(results=results, full_text=full_text))
 
