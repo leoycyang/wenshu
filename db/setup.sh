@@ -16,7 +16,7 @@ mypath=`realpath "$0"`
 mybase=`dirname "$mypath"`
 cd $mybase
 
-# create table schema:
+create table schema:
 sqlite3 "$dbpath" < create.sql
 columns=(source_url case_id case_title court location case_type case_type_code source procedure ruling_date publication_date parties cause_of_action legal_basis full_text)
 
@@ -37,3 +37,12 @@ SELECT 'WARNING: NULLs in $column: ' || CAST(CHANGES() AS TEXT);
 EOF
     done
 done
+
+csvfile=data_raw/guiding_cases.csv
+echo "loading $csvfile..."
+cat <<EOF | sqlite3 "$dbpath"
+.mode csv
+.import -v --csv --skip 1 $csvfile guiding_cases
+.mode list
+SELECT 'INFO: rows loaded: ' || CAST(TOTAL_CHANGES() AS TEXT);
+EOF
