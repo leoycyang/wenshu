@@ -160,7 +160,7 @@
         });
 
         const fetchPage = () => {
-            fetch("{{ url_for('main.extract_refcase', _external=True) }}", {
+            fetch("{{ url_for('main.extract_guiding', _external=True) }}", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({ rowid: parseInt("{{ rowid }}") }),

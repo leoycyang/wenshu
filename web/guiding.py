@@ -1,4 +1,6 @@
 import re
+from rapidfuzz import fuzz
+from heapq import nlargest
 
 def extract(full_text, anchor_regexp, context_before, context_after, extract_regexps):
     """
@@ -61,3 +63,12 @@ def extract(full_text, anchor_regexp, context_before, context_after, extract_reg
         # set starting search position for the next anchor:
         start_pos = anchor_span[1]
     return results
+
+def simrank(target: str, candidates: list[str], topk: int = 3) -> list[tuple[int, float]]:
+    """
+    Given a target string and a list of candidate strings, return a list of topk fuzzy matches.
+    Each returned entry consists of the match's index in the candidate list, as well as the similarity score.
+    The entries are sorted from greatest similarity score to least similarity score, using rapidfuzz.fuzz.ratio().
+    """
+    scores = [(i, fuzz.ratio(target, cand)) for i, cand in enumerate(candidates)]
+    return nlargest(topk, scores, key=lambda x: x[1])
