@@ -72,3 +72,23 @@ def simrank(target: str, candidates: list[str], topk: int = 3) -> list[tuple[int
     """
     scores = [(i, fuzz.ratio(target, cand)) for i, cand in enumerate(candidates)]
     return nlargest(topk, scores, key=lambda x: x[1])
+
+def combine_scores(matches: list[tuple[int, str, float]], factor_weights: dict[str, float]) -> list[tuple[int, float]]:
+    """Given a list of matches characterized by (case#, factor, score), where score is in [0,1],
+    compute the combined scores for all case#, sorted by score descending.
+    If there are multiple matches for the same case and same factor, only the highest score is considered.
+    Each factor score is further weighed by the given weights dictionary.
+    The final score is normalized to be within [0,1].
+    """
+    factor_max: dict[tuple[int, str], float] = {}
+    for case, factor, score in matches:
+        if score > factor_max.get((case, factor), 0.0):
+            factor_max[(case, factor)] = score
+    scores = {}
+    for (case, factor), max_score in factor_max.items():
+        if case not in scores:
+            scores[case] = 0.0
+        scores[case] += max_score * factor_weights[factor]
+    for case in scores:
+        scores[case] /= sum(factor_weights.values())
+    return sorted(scores.items(), key = lambda x: - x[1])

@@ -20,9 +20,9 @@ CREATE TABLE wenshu(
 CREATE TABLE guiding_cases (
     id INTEGER NOT NULL PRIMARY KEY, -- 序号
     case_title TEXT NOT NULL, -- 案件名称
-    series INTEGER NOT NULL, -- 批次 *** CONVERT!
-    guiding_case_number INTEGER NOT NULL UNIQUE, -- 指导案例件编号 *** CONVERT!
-    publication_date DATE NOT NULL, -- 发布时间 **** CONVERT
+    series INTEGER NOT NULL, -- 批次
+    guiding_case_number INTEGER NOT NULL UNIQUE, -- 指导案例件编号
+    publication_date DATE NOT NULL, -- 发布时间
     keywords TEXT, -- 关键词 *** MIULTIPLE
     related_codes TEXT -- 相关法条 **** MULTIPLE & CLEAN
     -- first_trial_court TEXT, -- 一审法院

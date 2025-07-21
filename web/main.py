@@ -74,14 +74,34 @@ def extract_guiding():
         r'［(?P<case_pub_ref>[^］]*)］',
         r'(?P<series>\d+)[批|期|辑]',
     ])
-    guilding_titles = [c[app.guiding_case_columns.index('case_title')] for c in app.guiding_cases]
+    guiding_titles = [c[app.guiding_case_columns.index('case_title')] for c in app.guiding_cases]
+    guiding_numbers = [c[app.guiding_case_columns.index('guiding_case_number')] for c in app.guiding_cases]
+    matches = []
     for result in results:
         for extract in result['extracts']:
             if extract['label'] == 'case_title':
                 case_title = extract['text']
-                guiding_index, score = guiding.simrank(case_title, guilding_titles, 1)[0]
-                extract['text'] += f' -> {app.guiding_cases[guiding_index][app.guiding_case_columns.index('guiding_case_number')]} (score: {score})'
-    return jsonify(dict(results=results, full_text=full_text))
+                guiding_index, score = guiding.simrank(case_title, guiding_titles, 1)[0]
+                case_number = app.guiding_cases[guiding_index][app.guiding_case_columns.index('guiding_case_number')]
+                extract['text'] += f' -> {case_number} (score: {score})'
+                matches.append((case_number, 'title', score/100.0))
+            elif extract['label'] in ('case_number', 'number'):
+                case_number = int(extract['text'])
+                try:
+                    guiding_index = guiding_numbers.index(case_number)
+                    extract['text'] += f' -> {app.guiding_cases[guiding_index][app.guiding_case_columns.index('case_title')]}'
+                    matches.append((case_number, 'number', 1.0))
+                except ValueError:
+                    pass
+    factor_weights = {
+        'title': 150*4,
+        'series': 27,
+        'number': 150*2,
+        'year': 2021-2011+1,
+        'month': 12, 
+    }
+    combined_scores = list(guiding.combine_scores(matches, factor_weights))
+    return jsonify(dict(results=results, full_text=full_text + str(combined_scores)))
 
 @bp.route('/')
 def index():
