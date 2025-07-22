@@ -4,10 +4,15 @@
 
 <h1>{{case_id}}</h1>
 
+<template v-if="guidingSummary">
+<h2>Summary of Guiding Case Extraction</h2>
+${guidingSummary}
+</template>
+
 <h2>Full Text</h2>
 <div class="annotated-text-container" v-html="renderedText"></div>
 
-<h2>Extracted Reference Cases</h2>
+<h2>Details on Guiding Case Extraction</h2>
 <table class="annotations-table">
     <thead>
         <tr>
@@ -40,6 +45,7 @@
 <script>
     function app_setup() {
         const fullText = ref('');
+        const guidingSummary = ref('');
         const anchors = ref([]);
 
         // Initialize highlightColors by calling the function
@@ -168,6 +174,7 @@
                 .then(response => response.json())
                 .then(response => {
                     fullText.value = response.full_text;
+                    guidingSummary.value = response.guiding_summary;
                     if (response.results) {
                         anchors.value = response.results.map((result, index) => ({
                             id: `a${index}`,
@@ -186,6 +193,7 @@
 
         return {
             fullText,
+            guidingSummary,
             anchors,
             renderedText,
             sortedAnnotations,
